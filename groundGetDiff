@@ -1,0 +1,64 @@
+CREATE PROCEDURE dbo.groundGetDiff (@start datetime, @end datetime)
+AS
+BEGIN
+
+  CREATE TABLE #tempsod (
+    card_number decimal(24),
+    card_type int,
+    card_sub_type int,
+    reg_date_time datetime,
+    sum_payment int,
+    begin_date_time datetime,
+    validator_id int,
+    id_agents int
+  )
+
+
+  INSERT INTO #tempsod (card_number, card_type, card_sub_type, reg_date_time, sum_payment, begin_date_time, validator_id, id_agents)
+    SELECT
+      st.card_number,
+      st.card_type,
+      st.card_sub_type,
+      st.reg_date_time,
+      st.sum_payment,
+      st.begin_date_time,
+      st.validator_id,
+      st.id_agents
+    FROM Arhiv_SOD.dbo.SodTrans st
+    WHERE st.card_type = 150
+    AND st.id_agents = 1
+    AND st.reg_date_time BETWEEN @start AND @end
+
+
+
+  SELECT
+    card_number = ISNULL(a.card_number, b.card_number),
+    reg_date_time = ISNULL(a.reg_date_time, b.reg_date_time),
+    card_sub_type = ISNULL(a.card_sub_type, b.card_sub_type),
+    sum_payment = ISNULL(a.sum_payment, b.sum_payment),
+    validator_id = ISNULL(a.validator_id, b.validator_id),
+    begin_date_time = ISNULL(a.begin_date_time, b.begin_date_time),
+    error_code =
+                CASE
+                  WHEN b.card_number IS NULL THEN 1
+                  WHEN a.card_number IS NULL THEN 2
+                  WHEN ABS(DATEDIFF(MINUTE, a.reg_date_time, b.reg_date_time)) > 3 THEN 4
+                  WHEN a.begin_date_time <> b.begin_date_time THEN 8
+                  WHEN a.sum_payment <> b.sum_payment THEN 16
+                  WHEN a.validator_id <> b.validator_id THEN 32
+                  ELSE 0
+                END
+  FROM #tempsod a
+  FULL JOIN Sverka.dbo.SverkaNGPT b
+    ON a.card_number = b.card_number
+  WHERE CASE
+    WHEN b.card_number IS NULL THEN 1
+    WHEN a.card_number IS NULL THEN 2
+    WHEN ABS(DATEDIFF(MINUTE, a.reg_date_time, b.reg_date_time)) > 3 THEN 4
+    WHEN a.begin_date_time <> b.begin_date_time THEN 8
+    WHEN a.sum_payment <> b.sum_payment THEN 16
+    WHEN a.validator_id <> b.validator_id THEN 32
+    ELSE 0
+  END <> 0
+END
+GO
